@@ -17,9 +17,7 @@ from app.db.base import Base
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
 
-    __table_args__ = (
-        Index("ix_refresh_tokens_user_expires", "user_id", "expires_at"),
-    )
+    __table_args__ = (Index("ix_refresh_tokens_user_expires", "user_id", "expires_at"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -35,11 +33,11 @@ class RefreshToken(Base):
     )
 
     family_id: Mapped[uuid.UUID] = mapped_column(
-    Uuid(as_uuid=True),
-    default=uuid.uuid4,
-    server_default=func.gen_random_uuid(),
-    nullable=False,
-    index=True,
+        Uuid(as_uuid=True),
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
+        nullable=False,
+        index=True,
     )
 
     token_hash: Mapped[str] = mapped_column(
@@ -83,5 +81,3 @@ class RefreshToken(Base):
         "User",
         back_populates="refresh_tokens",
     )
-
-    

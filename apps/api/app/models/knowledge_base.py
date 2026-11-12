@@ -57,3 +57,10 @@ class KnowledgeBase(Base):
         "User",
         back_populates="knowledge_bases",
     )
+
+    documents = relationship(
+        "Document",
+        back_populates="knowledge_base",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

@@ -32,9 +32,7 @@ async def register_user(
     email: str,
     password: str,
 ) -> User:
-    existing_user = await db.scalar(
-        select(User).where(User.email == email)
-    )
+    existing_user = await db.scalar(select(User).where(User.email == email))
 
     if existing_user:
         raise HTTPException(
@@ -51,12 +49,12 @@ async def register_user(
 
     try:
         await db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         await db.rollback()
         raise HTTPException(
             status_code=409,
             detail="An account with this email already exists",
-        )
+        ) from e
 
     await db.refresh(user)
 
@@ -68,9 +66,7 @@ async def authenticate_user(
     email: str,
     password: str,
 ) -> User:
-    user = await db.scalar(
-        select(User).where(User.email == email)
-    )
+    user = await db.scalar(select(User).where(User.email == email))
 
     if not user or not verify_password(
         password,

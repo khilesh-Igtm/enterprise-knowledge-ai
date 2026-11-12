@@ -31,11 +31,7 @@ def get_request_metadata(request: Request) -> tuple[str | None, str | None]:
 
     # Do not trust arbitrary forwarded IP headers unless the
     # application is behind a correctly configured trusted proxy.
-    ip_address = (
-        request.client.host
-        if request.client
-        else None
-    )
+    ip_address = request.client.host if request.client else None
 
     return user_agent, ip_address
 

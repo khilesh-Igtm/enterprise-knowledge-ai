@@ -14,9 +14,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(
-        bearer_scheme
-    ),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     unauthorized = HTTPException(
@@ -44,12 +42,10 @@ async def get_current_user(
 
         user_id = uuid.UUID(payload["sub"])
 
-    except (jwt.InvalidTokenError, ValueError, KeyError):
-        raise unauthorized
+    except (jwt.InvalidTokenError, ValueError, KeyError) as e:
+        raise unauthorized from e
 
-    user = await db.scalar(
-        select(User).where(User.id == user_id)
-    )
+    user = await db.scalar(select(User).where(User.id == user_id))
 
     if user is None or not user.is_active:
         raise unauthorized

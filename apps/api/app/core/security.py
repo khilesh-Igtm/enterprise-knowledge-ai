@@ -32,9 +32,7 @@ def create_access_token(user_id: uuid.UUID) -> str:
         "sub": str(user_id),
         "type": "access",
         "iat": now,
-        "exp": now + timedelta(
-            minutes=settings.access_token_expire_minutes
-        ),
+        "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
         "iss": settings.jwt_issuer,
         "jti": str(uuid.uuid4()),
     }
@@ -51,12 +49,8 @@ def generate_refresh_token() -> str:
 
 
 def hash_refresh_token(token: str) -> str:
-    return hashlib.sha256(
-        token.encode("utf-8")
-    ).hexdigest()
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def get_refresh_token_expiry() -> datetime:
-    return datetime.now(UTC) + timedelta(
-        days=settings.refresh_token_expire_days
-    )
+    return datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)

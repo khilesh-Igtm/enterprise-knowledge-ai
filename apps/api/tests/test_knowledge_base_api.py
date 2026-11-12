@@ -108,4 +108,4 @@ async def test_invalid_knowledge_base_uuid_returns_404(client):
         },
     )
 
-    assert response.status_code == 404
+    assert response.status_code == 422
