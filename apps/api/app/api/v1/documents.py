@@ -1,6 +1,7 @@
 import logging
 import uuid
-
+from app.worker.tasks.document_tasks import process_document
+from app.worker.celery_app import celery_app
 from fastapi import (
     APIRouter,
     Depends,
@@ -77,6 +78,16 @@ async def upload_document(
             )
 
         raise
+    try:
+        process_document.delay(str(document.id))
+    except Exception:
+        logger.exception(
+            "Failed to dispatch document processing task: %s",
+            document.id,
+        )
+        document.status = "failed"
+        await db.commit()
+        await db.refresh(document)
 
     return document
 
