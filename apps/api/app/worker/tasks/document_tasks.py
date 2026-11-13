@@ -1,198 +1,154 @@
 import asyncio
 import logging
-import os
-from pathlib import Path
 from uuid import UUID
 
-from celery import shared_task
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import (
-    async_sessionmaker,
-    create_async_engine,
-)
-from app.core.config import settings
-from app.models.document import Document
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.core.config import settings
+from app.integrations.qdrant import create_qdrant_client, ensure_collection
+from app.models.document import Document
+from app.models.knowledge_base import KnowledgeBase
+from app.services.chunking import chunk_document
+from app.services.embeddings import GeminiEmbeddingService
+from app.services.extraction import extract_document
+from app.services.storage import resolve_storage_path
+from app.services.vector_store import store_chunks
+from app.worker.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
 
 
-DATABASE_URL = settings.DATABASE_URL
-
-STORAGE_DIR = Path(
-    os.getenv("STORAGE_DIR", "./storage")
-).resolve()
-
-
-async def process_document_async(
-    document_id: UUID,
-) -> dict:
-    """
-    Process a document asynchronously.
-
-    Phase 3 responsibilities:
-    1. Retrieve document metadata.
-    2. Update processing status.
-    3. Validate stored file.
-    4. Update final status.
-    """
-
-    engine = create_async_engine(
-        DATABASE_URL,
-        pool_pre_ping=True,
-    )
+async def process_document_async(document_id: UUID) -> dict:
+    engine = create_async_engine(settings.DATABASE_URL)
 
     session_factory = async_sessionmaker(
         engine,
         expire_on_commit=False,
-        autoflush=False,
     )
+
+    qdrant = create_qdrant_client()
 
     try:
         async with session_factory() as session:
-
             result = await session.execute(
-                select(Document).where(
-                    Document.id == document_id
+                select(Document, KnowledgeBase.user_id)
+                .join(
+                    KnowledgeBase,
+                    Document.knowledge_base_id == KnowledgeBase.id,
                 )
+                .where(Document.id == document_id)
             )
 
-            document = result.scalar_one_or_none()
+            row = result.one_or_none()
 
-            if document is None:
-                logger.warning(
-                    "Document %s does not exist.",
-                    document_id,
-                )
+            if row is None:
+                return {"status": "not_found"}
 
-                return {
-                    "document_id": str(document_id),
-                    "status": "not_found",
-                }
+            document, user_id = row
 
-            # Idempotency
             if document.status == "processed":
-                return {
-                    "document_id": str(document_id),
-                    "status": "processed",
-                    "message": "Already processed.",
-                }
-
-            if document.status == "failed":
-                return {
-                    "document_id": str(document_id),
-                    "status": "failed",
-                    "message": "Document previously failed.",
-                }
+                return {"status": "already_processed"}
 
             document.status = "processing"
-
             await session.commit()
 
-            # Prevent directory traversal.
-            file_path = (
-                STORAGE_DIR / document.storage_path
-            ).resolve()
+            document_id = document.id
+            knowledge_base_id = document.knowledge_base_id
+            filename = document.filename
+            storage_key = document.storage_path
 
-            if not file_path.is_relative_to(STORAGE_DIR):
-                raise ValueError(
-                    "Invalid document storage path."
-                )
+        file_path = resolve_storage_path(storage_key)
 
-            if not file_path.is_file():
-                raise FileNotFoundError(
-                    f"Document file not found: {document_id}"
-                )
+        if not file_path.is_file():
+            raise FileNotFoundError("Stored document file does not exist.")
 
-            if file_path.stat().st_size == 0:
-                raise ValueError(
-                    "Uploaded document is empty."
-                )
+        pages = await asyncio.to_thread(
+            extract_document,
+            file_path,
+        )
 
-            # Phase 3 validation complete.
-            # Text extraction and vector indexing
-            # will be implemented in subsequent phases.
+        chunks = chunk_document(
+            pages=pages,
+            document_id=document_id,
+            knowledge_base_id=knowledge_base_id,
+            user_id=user_id,
+        )
 
-            document.status = "processed"
+        if not chunks:
+            raise ValueError("Document produced no chunks.")
 
-            await session.commit()
+        embedding_service = GeminiEmbeddingService()
 
-            logger.info(
-                "Document %s processing completed.",
-                document_id,
-            )
+        vectors = await embedding_service.embed_documents(
+            [chunk.text for chunk in chunks]
+        )
 
-            return {
-                "document_id": str(document_id),
-                "status": "processed",
-                "message": "Storage validation completed.",
-            }
+        await ensure_collection(qdrant)
 
-    except (FileNotFoundError, ValueError):
-        logger.exception(
-            "Permanent document validation failure: %s",
-            document_id,
+        await store_chunks(
+            client=qdrant,
+            chunks=chunks,
+            vectors=vectors,
+            filename=filename,
         )
 
         async with session_factory() as session:
-            result = await session.execute(
-                select(Document).where(
-                    Document.id == document_id
-                )
-            )
+            document = await session.get(Document, document_id)
 
-            document = result.scalar_one_or_none()
+            if document is None:
+                raise ValueError("Document was deleted during processing.")
 
-            if document is not None:
-                document.status = "failed"
-                await session.commit()
+            document.status = "processed"
+            await session.commit()
 
-        raise
-
-    except SQLAlchemyError:
-        logger.exception(
-            "Database failure for document: %s",
+        logger.info(
+            "Document processing completed: %s (%s chunks)",
             document_id,
+            len(chunks),
         )
+
+        return {
+            "status": "processed",
+            "document_id": str(document_id),
+            "chunks_created": len(chunks),
+        }
+
+    except Exception:
+        logger.exception("Document processing failed: %s", document_id)
+
+        try:
+            async with session_factory() as session:
+                document = await session.get(Document, document_id)
+
+                if document is not None:
+                    document.status = "failed"
+                    await session.commit()
+        except SQLAlchemyError:
+            logger.exception("Could not update document failure status.")
+
         raise
 
     finally:
+        await qdrant.close()
         await engine.dispose()
 
 
-@shared_task(
+
+
+
+@celery_app.task(
     bind=True,
     name="documents.process_document",
     max_retries=3,
-    default_retry_delay=10,
-    acks_late=True,
+    default_retry_delay=30,
 )
-def process_document(
-    self,
-    document_id: str,
-) -> dict:
-    """
-    Celery entry point.
-
-    Database connectivity failures are retried.
-    Permanent file validation failures are not.
-    """
-
+def process_document(self, document_id: str) -> dict:
     try:
         return asyncio.run(
-            process_document_async(
-                UUID(document_id)
-            )
+            process_document_async(UUID(document_id))
         )
-
-    except SQLAlchemyError as exc:
-        logger.exception(
-            "Database error processing document %s",
-            document_id,
-        )
-
-        raise self.retry(
-            exc=exc,
-            countdown=10 * (2 ** self.request.retries),
-        )
+    except Exception as exc:
+        logger.exception("Celery document task failed.")
+        raise self.retry(exc=exc) from exc

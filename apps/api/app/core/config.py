@@ -26,6 +26,20 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     QDRANT_URL: str = "http://localhost:6333"
 
+        # Gemini embeddings
+    GEMINI_API_KEY: str | None = None
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-2"
+    GEMINI_EMBEDDING_DIMENSIONS: int = 768
+    GEMINI_EMBEDDING_BATCH_SIZE: int = 50
+
+    # Qdrant Cloud
+    QDRANT_API_KEY: str | None = None
+    QDRANT_COLLECTION_NAME: str = "enterprise_knowledge"
+
+    # Chunking
+    CHUNK_SIZE: int = 500
+    CHUNK_OVERLAP: int = 75
+
     LOG_LEVEL: str = "INFO"
 
     jwt_secret_key: str = Field(

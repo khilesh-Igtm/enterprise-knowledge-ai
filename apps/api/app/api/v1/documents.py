@@ -1,7 +1,6 @@
 import logging
 import uuid
-from app.worker.tasks.document_tasks import process_document
-from app.worker.celery_app import celery_app
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -16,10 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_current_user
 from app.api.v1.knowledge_bases import get_owned_knowledge_base
 from app.db.session import get_db
+from app.integrations.qdrant import create_qdrant_client
 from app.models.document import Document
 from app.models.user import User
 from app.schemas.document import DocumentResponse
 from app.services.storage import delete_file, save_upload
+from app.services.vector_store import delete_document_vectors
+from app.worker.tasks.document_tasks import process_document
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +156,7 @@ async def delete_document(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # 1. Check ownership using your existing logic
     result = await db.execute(
         select(Document)
         .join(Document.knowledge_base)
@@ -172,14 +175,33 @@ async def delete_document(
         )
 
     storage_key = document.storage_path
-
-    await db.delete(document)
-    await db.commit()
+    qdrant = create_qdrant_client()
 
     try:
-        delete_file(storage_key)
-    except (ValueError, OSError):
-        logger.exception(
-            "Document deleted from database but file cleanup failed: %s",
-            storage_key,
+        # 2. Delete vectors from Qdrant Cloud
+        await delete_document_vectors(
+            client=qdrant,
+            user_id=str(current_user.id),
+            knowledge_base_id=str(document.knowledge_base_id),
+            document_id=str(document.id),
         )
+
+        # 3. Delete from PostgreSQL Database
+        await db.delete(document)
+        await db.commit()
+
+        # 4. Delete physical file (Synchronous call)
+        try:
+            delete_file(storage_key)
+        except (ValueError, OSError):
+            logger.exception(
+                "Document deleted from database but file cleanup failed: %s",
+                storage_key,
+            )
+
+    except Exception:
+        await db.rollback()
+        raise
+
+    finally:
+        await qdrant.close()

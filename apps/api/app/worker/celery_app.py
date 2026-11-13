@@ -1,10 +1,9 @@
-import os
 
 from celery import Celery
 from celery.signals import worker_ready
 
-
 from app.core.config import settings
+
 REDIS_URL = settings.REDIS_URL
 
 celery_app = Celery(
