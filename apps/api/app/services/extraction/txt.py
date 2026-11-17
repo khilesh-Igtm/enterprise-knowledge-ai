@@ -10,9 +10,7 @@ def extract_txt(file_path: Path) -> list[ExtractedPage]:
     """Extract UTF-8 text from TXT files."""
 
     try:
-        text = file_path.read_text(
-            encoding="utf-8-sig"
-        ).strip()
+        text = file_path.read_text(encoding="utf-8-sig").strip()
 
     except UnicodeDecodeError as exc:
         raise DocumentExtractionError(
@@ -20,14 +18,10 @@ def extract_txt(file_path: Path) -> list[ExtractedPage]:
         ) from exc
 
     except OSError as exc:
-        raise DocumentExtractionError(
-            "Could not read TXT file."
-        ) from exc
+        raise DocumentExtractionError("Could not read TXT file.") from exc
 
     if not text:
-        raise DocumentExtractionError(
-            "TXT file contains no extractable text."
-        )
+        raise DocumentExtractionError("TXT file contains no extractable text.")
 
     return [
         ExtractedPage(

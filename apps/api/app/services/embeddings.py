@@ -20,9 +20,42 @@ class GeminiEmbeddingService:
         self.dimensions = settings.GEMINI_EMBEDDING_DIMENSIONS
         self.batch_size = settings.GEMINI_EMBEDDING_BATCH_SIZE
 
+    def _embed_query(self, text: str) -> list[float]:
+        response = self.client.models.embed_content(
+            model=self.model,
+            contents=[[text]],
+            config=types.EmbedContentConfig(
+                task_type="RETRIEVAL_QUERY",
+                output_dimensionality=self.dimensions,
+            ),
+        )
+
+        if not response.embeddings:
+            raise EmbeddingError("Gemini returned no query embedding.")
+
+        vector = response.embeddings[0].values
+
+        if len(vector) != self.dimensions:
+            raise EmbeddingError("Unexpected query embedding dimensions.")
+
+        return vector
+
+    async def embed_query(self, text: str) -> list[float]:
+        if not text.strip():
+            raise EmbeddingError("Query cannot be empty.")
+
+        try:
+            return await asyncio.to_thread(
+                self._embed_query,
+                text,
+            )
+        except Exception as exc:
+            raise EmbeddingError("Failed to generate query embedding.") from exc
+
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
-        # FIX for gemini-embedding-2: 
-        # Prevent it from combining all chunks into 1 embedding by wrapping each chunk in a nested list.
+        # FIX for gemini-embedding-2:
+        # Prevent it from combining all chunks
+        # into 1 embedding by wrapping each chunk in a nested list.
         batched_contents = [[text] for text in texts]
 
         response = self.client.models.embed_content(
@@ -37,10 +70,7 @@ class GeminiEmbeddingService:
         if not response.embeddings:
             raise EmbeddingError("Gemini returned no embeddings.")
 
-        vectors = [
-            embedding.values
-            for embedding in response.embeddings
-        ]
+        vectors = [embedding.values for embedding in response.embeddings]
 
         if len(vectors) != len(texts):
             raise EmbeddingError("Gemini returned an unexpected embedding count.")

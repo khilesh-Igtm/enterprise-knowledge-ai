@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     QDRANT_URL: str = "http://localhost:6333"
 
-        # Gemini embeddings
+    # Gemini embeddings
     GEMINI_API_KEY: str | None = None
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-2"
     GEMINI_EMBEDDING_DIMENSIONS: int = 768
@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 75
 
     LOG_LEVEL: str = "INFO"
+
+    # Groq LLM
+    GROQ_API_KEY: str | None = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+
+    # RAG configuration
+    CHAT_TOP_K: int = 6
+    CHAT_SCORE_THRESHOLD: float = 0.35
+    CHAT_MAX_CONTEXT_TOKENS: int = 6000
+    CHAT_MAX_ANSWER_TOKENS: int = 1200
+    CHAT_HISTORY_MESSAGES: int = 8
 
     jwt_secret_key: str = Field(
         default="CHANGE_THIS_TO_A_RANDOM_SECRET_OF_AT_LEAST_32_CHARS",

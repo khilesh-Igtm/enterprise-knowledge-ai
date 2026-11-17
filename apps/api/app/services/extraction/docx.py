@@ -27,7 +27,6 @@ def extract_docx(file_path: Path) -> list[ExtractedPage]:
         content_blocks: list[str] = []
 
         for block in document.iter_inner_content():
-
             if isinstance(block, Paragraph):
                 text = block.text.strip()
 
@@ -35,31 +34,21 @@ def extract_docx(file_path: Path) -> list[ExtractedPage]:
                     content_blocks.append(text)
 
             elif isinstance(block, Table):
-
                 for row in block.rows:
-                    cells = [
-                        cell.text.strip()
-                        for cell in row.cells
-                    ]
+                    cells = [cell.text.strip() for cell in row.cells]
 
-                    row_text = " | ".join(
-                        cell for cell in cells if cell
-                    )
+                    row_text = " | ".join(cell for cell in cells if cell)
 
                     if row_text:
                         content_blocks.append(row_text)
 
     except (BadZipFile, PackageNotFoundError, ValueError, OSError) as exc:
-        raise DocumentExtractionError(
-            "Could not extract text from DOCX."
-        ) from exc
+        raise DocumentExtractionError("Could not extract text from DOCX.") from exc
 
     text = "\n\n".join(content_blocks).strip()
 
     if not text:
-        raise DocumentExtractionError(
-            "DOCX contains no extractable text."
-        )
+        raise DocumentExtractionError("DOCX contains no extractable text.")
 
     return [
         ExtractedPage(

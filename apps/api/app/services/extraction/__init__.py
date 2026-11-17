@@ -17,9 +17,7 @@ def extract_document(
     """
 
     if not file_path.is_file():
-        raise DocumentExtractionError(
-            "Document file does not exist."
-        )
+        raise DocumentExtractionError("Document file does not exist.")
 
     extension = file_path.suffix.lower()
 
@@ -32,9 +30,7 @@ def extract_document(
     extractor = extractors.get(extension)
 
     if extractor is None:
-        raise DocumentExtractionError(
-            f"Unsupported document format: {extension}"
-        )
+        raise DocumentExtractionError(f"Unsupported document format: {extension}")
 
     return extractor(file_path)
 

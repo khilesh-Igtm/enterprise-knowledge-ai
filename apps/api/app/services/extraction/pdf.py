@@ -20,14 +20,12 @@ def extract_pdf(file_path: Path) -> list[ExtractedPage]:
 
     try:
         with fitz.open(file_path) as pdf:
-
             if pdf.is_encrypted:
                 raise DocumentExtractionError(
                     "Password-protected PDFs are not supported."
                 )
 
             for page_index, page in enumerate(pdf):
-
                 text = page.get_text(
                     "text",
                     sort=True,
@@ -48,14 +46,11 @@ def extract_pdf(file_path: Path) -> list[ExtractedPage]:
         raise
 
     except (fitz.FileDataError, RuntimeError, OSError) as exc:
-        raise DocumentExtractionError(
-            "Could not extract text from PDF."
-        ) from exc
+        raise DocumentExtractionError("Could not extract text from PDF.") from exc
 
     if not extracted_pages:
         raise DocumentExtractionError(
-            "PDF contains no extractable text. "
-            "Scanned PDFs may require OCR."
+            "PDF contains no extractable text. Scanned PDFs may require OCR."
         )
 
     return extracted_pages

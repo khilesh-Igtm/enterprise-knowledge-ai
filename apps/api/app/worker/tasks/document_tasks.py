@@ -135,9 +135,6 @@ async def process_document_async(document_id: UUID) -> dict:
         await engine.dispose()
 
 
-
-
-
 @celery_app.task(
     bind=True,
     name="documents.process_document",
@@ -146,9 +143,7 @@ async def process_document_async(document_id: UUID) -> dict:
 )
 def process_document(self, document_id: str) -> dict:
     try:
-        return asyncio.run(
-            process_document_async(UUID(document_id))
-        )
+        return asyncio.run(process_document_async(UUID(document_id)))
     except Exception as exc:
         logger.exception("Celery document task failed.")
         raise self.retry(exc=exc) from exc
