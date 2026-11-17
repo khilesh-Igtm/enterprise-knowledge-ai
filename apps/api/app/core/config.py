@@ -17,6 +17,8 @@ class Settings(BaseSettings):
         ".txt",
     ]
 
+    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+
     test_database_url: str | None = None
 
     DATABASE_URL: str = (
